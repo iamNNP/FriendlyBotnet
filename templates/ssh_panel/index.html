@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSH Command Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .result-card {
+            margin-bottom: 1rem;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 1rem;
+            border-radius: 0.25rem;
+        }
+        .error-message {
+            color: #dc3545;
+            background-color: #f8d7da;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-5">
+        <h1 class="mb-4">SSH Command Panel</h1>
+        
+        <div class="card mb-4">
+            <div class="card-body">
+                <form method="POST">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        {{ form.command.label_tag }}
+                        {{ form.command }}
+                    </div>
+                    <button type="submit" class="btn btn-primary">Send Command</button>
+                </form>
+            </div>
+        </div>
+
+        {% if results %}
+            <h2 class="mb-3">Results:</h2>
+            {% for result in results %}
+                <div class="card result-card">
+                    <div class="card-header">
+                        <h3 class="h5 mb-0">{{ result.name }}</h3>
+                    </div>
+                    <div class="card-body">
+                        {% if result.output %}
+                            <pre>{{ result.output }}</pre>
+                        {% endif %}
+                        {% if result.error %}
+                            <div class="error-message">
+                                Error: {{ result.error }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 

@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  alpine1:
+    build:
+      context: .
+      dockerfile: Dockerfile.sshd
+    container_name: alpine11
+    ports:
+      - "2222:22"
+    networks:
+      - botnet_network
+
+  alpine2:
+    build:
+      context: .
+      dockerfile: Dockerfile.sshd
+    container_name: alpine21
+    ports:
+      - "2221:22"
+    networks:
+      - botnet_network
+
+  alpine3:
+    build:
+      context: .
+      dockerfile: Dockerfile.sshd
+    container_name: alpine31
+    ports:
+      - "2220:22"
+    networks:
+      - botnet_network
+
+networks:
+  botnet_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.139.0/24 
