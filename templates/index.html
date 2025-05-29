@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SSH Command Panel</title>
+</head>
+<body>
+    <h1>SSH Command Panel</h1>
+    <form method="POST">
+        <label for="command">Enter Command:</label>
+        <input type="text" id="command" name="command" required>
+        <button type="submit">Send</button>
+    </form>
+
+    {% if results %}
+        <h2>Results:</h2>
+        {% for result in results %}
+            <h3>{{ result.name }}</h3>
+            {% if result.output %}
+                <pre>{{ result.output }}</pre>
+            {% endif %}
+            {% if result.error %}
+                <p style="color: red;">Error: {{ result.error }}</p>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+</body>
+</html>
