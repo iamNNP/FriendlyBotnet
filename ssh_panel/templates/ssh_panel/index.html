@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>SSH Command Panel</h1>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Command Input</h5>
+                </div>
+                <div class="card-body">
+                    <form id="commandForm" method="post">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            {{ form.command.label_tag }}
+                            {{ form.command }}
+                        </div>
+                        <button type="submit" class="btn btn-primary">Execute</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Command Output</h5>
+                </div>
+                <div class="card-body">
+                    <div id="output" class="bg-dark text-light p-3" style="height: 400px; overflow-y: auto; font-family: monospace;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('commandForm');
+    const output = document.getElementById('output');
+    let eventSource = null;
+
+    function appendOutput(text, isError = false) {
+        const line = document.createElement('div');
+        line.textContent = text;
+        if (isError) {
+            line.style.color = '#ff6b6b';
+        }
+        output.appendChild(line);
+        output.scrollTop = output.scrollHeight;
+    }
+
+    function clearOutput() {
+        output.innerHTML = '';
+    }
+
+    function startEventSource(command) {
+        if (eventSource) {
+            eventSource.close();
+        }
+
+        clearOutput();
+        appendOutput(`Executing command: ${command}`);
+
+        const url = `/stream_command_output/?command=${encodeURIComponent(command)}`;
+        eventSource = new EventSource(url);
+
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            const isError = data.output.startsWith('ERROR:');
+            appendOutput(data.output, isError);
+        };
+
+        eventSource.onerror = function(error) {
+            appendOutput('Connection error. Please try again.', true);
+            eventSource.close();
+        };
+    }
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const command = form.querySelector('#id_command').value;
+        if (command) {
+            startEventSource(command);
+        }
+    });
+});
+</script>
+{% endblock %} 
