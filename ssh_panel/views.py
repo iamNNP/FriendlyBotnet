@@ -4,6 +4,7 @@ from .forms import SSHCommandForm
 import paramiko
 import json
 import time
+import asyncio
 
 # SSH details for the Docker containers
 CONTAINERS = [
@@ -24,61 +25,40 @@ def send_command_via_ssh(host, port, username, password, command):
         
         timeout = 30  # seconds
         start_time = time.time()
-        buffer = ""
         
-        while True:
-            if stdout.channel.exit_status_ready():
-                # Read any remaining output
-                while stdout.channel.recv_ready():
-                    chunk = stdout.channel.recv(1).decode()
-                    if chunk == '\n':
-                        yield buffer + '\n'
-                        buffer = ""
-                    else:
-                        buffer += chunk
-                if buffer:
-                    yield buffer
-                while stderr.channel.recv_stderr_ready():
-                    chunk = stderr.channel.recv_stderr(1).decode()
-                    if chunk == '\n':
-                        yield f"ERROR: {buffer}\n"
-                        buffer = ""
-                    else:
-                        buffer += chunk
-                if buffer:
-                    yield f"ERROR: {buffer}"
-                break
-            
-            # Read available output
+        # Read stdout
+        while not stdout.channel.exit_status_ready():
             if stdout.channel.recv_ready():
-                chunk = stdout.channel.recv(1).decode()
-                if chunk == '\n':
-                    yield buffer + '\n'
-                    buffer = ""
-                else:
-                    buffer += chunk
-                    
+                chunk = stdout.channel.recv(1024).decode()
+                if chunk:
+                    yield chunk
+            
             if stderr.channel.recv_stderr_ready():
-                chunk = stderr.channel.recv_stderr(1).decode()
-                if chunk == '\n':
-                    yield f"ERROR: {buffer}\n"
-                    buffer = ""
-                else:
-                    buffer += chunk
+                chunk = stderr.channel.recv_stderr(1024).decode()
+                if chunk:
+                    yield f"ERROR: {chunk}"
             
             if time.time() - start_time > timeout:
-                if buffer:
-                    yield buffer
                 yield f"\nCommand timed out after {timeout} seconds"
                 stdin.channel.close()
                 break
             
             time.sleep(0.01)  # Small sleep to prevent CPU overuse
         
-        if stdout.channel.exit_status_ready():
-            exit_status = stdout.channel.recv_exit_status()
-            if exit_status != 0:
-                yield f"\nCommand exited with status {exit_status}"
+        # Read any remaining output
+        while stdout.channel.recv_ready():
+            chunk = stdout.channel.recv(1024).decode()
+            if chunk:
+                yield chunk
+        
+        while stderr.channel.recv_stderr_ready():
+            chunk = stderr.channel.recv_stderr(1024).decode()
+            if chunk:
+                yield f"ERROR: {chunk}"
+        
+        exit_status = stdout.channel.recv_exit_status()
+        if exit_status != 0:
+            yield f"\nCommand exited with status {exit_status}"
         
         ssh.close()
     except Exception as e:
@@ -91,9 +71,9 @@ def stream_command_output(request):
         return StreamingHttpResponse("No command provided", content_type='text/plain')
     
     def event_stream():
-        container = CONTAINERS[0]
-        for output in send_command_via_ssh(container["host"], container["port"], container["username"], container["password"], command):
-            yield f"data: {json.dumps({'container': container['name'], 'output': output})}\n\n"
+        for container in CONTAINERS:
+            for output in send_command_via_ssh(container["host"], container["port"], container["username"], container["password"], command):
+                yield f"data: {json.dumps({'container': container['name'], 'output': output})}\n\n"
         
     return StreamingHttpResponse(
         event_stream(),

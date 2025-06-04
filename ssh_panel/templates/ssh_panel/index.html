@@ -1,92 +1,285 @@
-{% extends 'base.html' %}
-
-{% block content %}
-<div class="container mt-4">
-    <h1>SSH Command Panel</h1>
-    
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Command Input</h5>
-                </div>
-                <div class="card-body">
-                    <form id="commandForm" method="post">
-                        {% csrf_token %}
-                        <div class="form-group">
-                            {{ form.command.label_tag }}
-                            {{ form.command }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSH Command Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #fff;
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .result-card {
+            margin-bottom: 1rem;
+            background-color: #2d2d2d;
+            border: 1px solid #3d3d3d;
+        }
+        .card-header {
+            background-color: #2d2d2d;
+            border-bottom: 1px solid #3d3d3d;
+            color: #fff;
+        }
+        pre {
+            background-color: #1e1e1e;
+            padding: 1rem;
+            border-radius: 0.25rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #00ff00;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            margin: 0;
+        }
+        .error-message {
+            color: #ff6b6b;
+            background-color: #2d2d2d;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            margin-top: 0.5rem;
+        }
+        .container-output {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .loading {
+            display: none;
+            margin-left: 10px;
+        }
+        .shell-container {
+            position: relative;
+            background-color: #1e1e1e;
+            border: 1px solid #3d3d3d;
+            border-radius: 0.25rem;
+            padding: 0.75rem;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .shell-line {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .shell-prompt {
+            color: #00ff00;
+            margin-right: 0.5rem;
+            user-select: none;
+        }
+        .shell-input {
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            flex-grow: 1;
+            outline: none;
+            caret-color: #00ff00;
+        }
+        .shell-input::placeholder {
+            color: #777;
+        }
+        .shell-history {
+            color: #777;
+        }
+        .shell-command {
+            color: #fff;
+        }
+        .shell-output {
+            color: #00ff00;
+            margin-left: 1.5rem;
+            white-space: pre-wrap;
+        }
+        .btn-primary {
+            background-color: #007acc;
+            border-color: #007acc;
+        }
+        .btn-primary:hover {
+            background-color: #005999;
+            border-color: #005999;
+        }
+        h1 {
+            color: #fff;
+        }
+        .typing {
+            border-right: 2px solid #00ff00;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            from, to { border-color: transparent }
+            50% { border-color: #00ff00; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-5">
+        <h1 class="mb-4">SSH Command Panel</h1>
+        
+        <div class="card mb-4" style="background-color: #2d2d2d; border: 1px solid #3d3d3d;">
+            <div class="card-body">
+                <form id="commandForm" method="POST">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <div class="shell-container" id="shellContainer">
+                            <div class="shell-history" id="shellHistory"></div>
+                            <div class="shell-line">
+                                <span class="shell-prompt">$</span>
+                                {{ form.command }}
+                            </div>
                         </div>
-                        <button type="submit" class="btn btn-primary">Execute</button>
-                    </form>
-                </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        Send Command
+                        <span class="spinner-border spinner-border-sm loading" role="status" aria-hidden="true"></span>
+                    </button>
+                </form>
             </div>
         </div>
-        
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Command Output</h5>
-                </div>
-                <div class="card-body">
-                    <div id="output" class="bg-dark text-light p-3" style="height: 400px; overflow-y: auto; font-family: monospace;">
-                    </div>
-                </div>
-            </div>
+
+        <div id="results">
+            <!-- Results will be dynamically added here -->
         </div>
     </div>
-</div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('commandForm');
-    const output = document.getElementById('output');
-    let eventSource = null;
-
-    function appendOutput(text, isError = false) {
-        const line = document.createElement('div');
-        line.textContent = text;
-        if (isError) {
-            line.style.color = '#ff6b6b';
-        }
-        output.appendChild(line);
-        output.scrollTop = output.scrollHeight;
-    }
-
-    function clearOutput() {
-        output.innerHTML = '';
-    }
-
-    function startEventSource(command) {
-        if (eventSource) {
-            eventSource.close();
+    <script>
+        // Function to strip ANSI color codes
+        function stripAnsiCodes(text) {
+            return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
         }
 
-        clearOutput();
-        appendOutput(`Executing command: ${command}`);
+        // Command history array with timestamps
+        let commandHistory = JSON.parse(localStorage.getItem('commandHistory') || '[]');
+        let historyIndex = -1;
+        const commandInput = document.getElementById('id_command');
+        const shellContainer = document.getElementById('shellContainer');
+        const shellHistory = document.getElementById('shellHistory');
+        const MAX_HISTORY = 100;
 
-        const url = `/stream_command_output/?command=${encodeURIComponent(command)}`;
-        eventSource = new EventSource(url);
-
-        eventSource.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            const isError = data.output.startsWith('ERROR:');
-            appendOutput(data.output, isError);
-        };
-
-        eventSource.onerror = function(error) {
-            appendOutput('Connection error. Please try again.', true);
-            eventSource.close();
-        };
-    }
-
-    form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const command = form.querySelector('#id_command').value;
-        if (command) {
-            startEventSource(command);
+        // Format timestamp for display
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString();
         }
-    });
-});
-</script>
-{% endblock %} 
+
+        // Save command history to localStorage
+        function saveCommandHistory() {
+            localStorage.setItem('commandHistory', JSON.stringify(commandHistory));
+        }
+
+        // Add command to history with timestamp
+        function addToHistory(command) {
+            const timestamp = new Date().toISOString();
+            commandHistory.push({
+                command: command,
+                timestamp: timestamp
+            });
+            
+            if (commandHistory.length > MAX_HISTORY) {
+                commandHistory = commandHistory.slice(-MAX_HISTORY);
+            }
+            
+            saveCommandHistory();
+            historyIndex = -1;
+            updateShellHistory();
+        }
+
+        // Update shell history display
+        function updateShellHistory() {
+            shellHistory.innerHTML = commandHistory
+                .map(item => `
+                    <div class="shell-line">
+                        <span class="shell-prompt">$</span>
+                        <span class="shell-command">${item.command}</span>
+                    </div>
+                `)
+                .join('');
+            shellContainer.scrollTop = shellContainer.scrollHeight;
+        }
+
+        // Initialize shell history
+        updateShellHistory();
+
+        // Handle command history navigation
+        commandInput.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    commandInput.value = commandHistory[commandHistory.length - 1 - historyIndex].command;
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    commandInput.value = commandHistory[commandHistory.length - 1 - historyIndex].command;
+                } else if (historyIndex === 0) {
+                    historyIndex = -1;
+                    commandInput.value = '';
+                }
+            }
+        });
+
+        document.getElementById('commandForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const command = commandInput.value;
+            
+            if (command.trim()) {
+                addToHistory(command);
+            }
+
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = submitBtn.querySelector('.loading');
+            const results = document.getElementById('results');
+            
+            results.innerHTML = '';
+            submitBtn.disabled = true;
+            loading.style.display = 'inline-block';
+            
+            const eventSource = new EventSource(`/stream/?command=${encodeURIComponent(command)}`);
+            
+            const containers = {};
+            const containerNames = ['alpine11', 'alpine21', 'alpine31'];
+            
+            containerNames.forEach(name => {
+                containers[name] = {
+                    element: document.createElement('div'),
+                    output: document.createElement('pre')
+                };
+                containers[name].element.className = 'card result-card';
+                containers[name].element.innerHTML = `
+                    <div class="card-header">
+                        <h3 class="h5 mb-0">${name}</h3>
+                    </div>
+                    <div class="card-body container-output">
+                    </div>
+                `;
+                containers[name].element.querySelector('.card-body').appendChild(containers[name].output);
+                results.appendChild(containers[name].element);
+            });
+            
+            eventSource.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+                const container = containers[data.container];
+                if (container) {
+                    const output = container.output;
+                    const cleanOutput = stripAnsiCodes(data.output);
+                    output.textContent += cleanOutput;
+                    output.scrollTop = output.scrollHeight;
+                }
+            };
+            
+            eventSource.onerror = function() {
+                eventSource.close();
+                submitBtn.disabled = false;
+                loading.style.display = 'none';
+                commandInput.value = '';
+                commandInput.focus();
+            };
+        });
+    </script>
+</body>
+</html> 
