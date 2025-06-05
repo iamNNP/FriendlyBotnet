@@ -118,27 +118,31 @@
 <body>
     <div class="container py-5">
         <h1 class="mb-4">SSH Command Panel</h1>
-        
-        <div class="card mb-4" style="background-color: #2d2d2d; border: 1px solid #3d3d3d;">
-            <div class="card-body">
-                <form id="commandForm" method="POST">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <div class="shell-container" id="shellContainer">
-                            <div class="shell-history" id="shellHistory"></div>
-                            <div class="shell-line">
-                                <span class="shell-prompt">$</span>
-                                {{ form.command }}
-                            </div>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary" id="submitBtn">
-                        Send Command
-                        <span class="spinner-border spinner-border-sm loading" role="status" aria-hidden="true"></span>
-                    </button>
-                </form>
+
+        <form id="commandForm" method="POST" enctype="multipart/form-data" class="mb-3">
+            {% csrf_token %}
+            <div class="shell-container" id="shellContainer">
+                <div class="shell-history" id="shellHistory"></div>
+                <div class="shell-line mb-0">
+                    <span class="shell-prompt">$</span>
+                    {{ form.command }}
+                </div>
             </div>
-        </div>
+        </form>
+
+        <form id="uploadForm" method="POST" enctype="multipart/form-data" class="mb-3">
+            {% csrf_token %}
+            <div class="d-flex align-items-center gap-2 mt-2">
+                <button type="submit" class="btn btn-primary flex-fill" id="submitBtn">
+                    Send Command
+                    <span class="spinner-border spinner-border-sm loading" role="status" aria-hidden="true"></span>
+                </button>
+                <div class="flex-fill">
+                    {{ form.ssh_file }}
+                </div>
+                <button type="submit" class="btn btn-secondary flex-fill" name="upload" value="1">Upload SSH List</button>
+            </div>
+        </form>
 
         <div id="results">
             <!-- Results will be dynamically added here -->
@@ -202,6 +206,15 @@
 
         // Initialize shell history
         updateShellHistory();
+        // Add message to history only if it's not already the last entry
+        (function() {
+            var message = "{{ message|escapejs }}";
+            if (message != "None") {
+                if (!commandHistory.length || commandHistory[commandHistory.length-1].command !== message) {
+                    addToHistory(message);
+                }
+            }
+        })();
 
         // Handle command history navigation
         commandInput.addEventListener('keydown', function(e) {
@@ -242,24 +255,27 @@
             const eventSource = new EventSource(`/stream/?command=${encodeURIComponent(command)}`);
             
             const containers = {};
-            const containerNames = ['alpine11', 'alpine21', 'alpine31'];
-            
-            containerNames.forEach(name => {
-                containers[name] = {
-                    element: document.createElement('div'),
-                    output: document.createElement('pre')
-                };
-                containers[name].element.className = 'card result-card';
-                containers[name].element.innerHTML = `
-                    <div class="card-header">
-                        <h3 class="h5 mb-0">${name}</h3>
-                    </div>
-                    <div class="card-body container-output">
-                    </div>
-                `;
-                containers[name].element.querySelector('.card-body').appendChild(containers[name].output);
-                results.appendChild(containers[name].element);
-            });
+            // Dynamically get container names from the server
+            fetch('/get_containers/')
+                .then(response => response.json())
+                .then(containerNames => {
+                    containerNames.forEach(name => {
+                        containers[name] = {
+                            element: document.createElement('div'),
+                            output: document.createElement('pre')
+                        };
+                        containers[name].element.className = 'card result-card';
+                        containers[name].element.innerHTML = `
+                            <div class="card-header">
+                                <h3 class="h5 mb-0">${name}</h3>
+                            </div>
+                            <div class="card-body container-output">
+                            </div>
+                        `;
+                        containers[name].element.querySelector('.card-body').appendChild(containers[name].output);
+                        results.appendChild(containers[name].element);
+                    });
+                });
             
             eventSource.onmessage = function(e) {
                 const data = JSON.parse(e.data);
@@ -282,4 +298,4 @@
         });
     </script>
 </body>
-</html> 
+</html>

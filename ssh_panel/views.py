@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from django.http import StreamingHttpResponse
+from django.http import StreamingHttpResponse, JsonResponse
 from .forms import SSHCommandForm
 import paramiko
 import json
@@ -80,8 +80,47 @@ def stream_command_output(request):
         content_type='text/event-stream'
     )
 
+def parse_ssh_file(file):
+    """Parse uploaded SSH file and return a list of container dicts."""
+    containers = []
+    for line in file:
+        try:
+            line = line.decode('utf-8').strip()
+            if not line or line.startswith('#'):
+                continue
+            name, host, port, username, password = line.split(':')
+            containers.append({
+                'name': name,
+                'host': host,
+                'port': int(port),
+                'username': username,
+                'password': password
+            })
+        except Exception:
+            continue  # skip malformed lines
+    return containers
+
 def index(request):
-    form = SSHCommandForm()
+    global CONTAINERS
+    message = None
+    if request.method == 'POST' and 'upload' in request.POST:
+        form = SSHCommandForm(request.POST, request.FILES)
+        if form.is_valid():
+            ssh_file = form.cleaned_data.get('ssh_file')
+            if ssh_file:
+                containers = parse_ssh_file(ssh_file)
+                if containers:
+                    CONTAINERS = containers
+                    message = f"Loaded {len(containers)} SSH connections from file."
+                else:
+                    message = "No valid SSH connections found in file."
+    else:
+        form = SSHCommandForm(request.POST or None)
     return render(request, 'ssh_panel/index.html', {
         'form': form,
+        'message': message,
     })
+
+def get_containers(request):
+    """Return the list of container names as JSON."""
+    return JsonResponse([c['name'] for c in CONTAINERS], safe=False)
