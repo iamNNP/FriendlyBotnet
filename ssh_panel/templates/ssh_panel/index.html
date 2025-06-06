@@ -118,28 +118,24 @@
 <body>
     <div class="container py-5">
         <h1 class="mb-4">SSH Command Panel</h1>
+        
+        <div class="shell-container" id="shellContainer">
+            <div class="shell-history" id="shellHistory"></div>
+            <div class="shell-line mb-0">
+                <span class="shell-prompt">$</span>
+                <input type="text" class="shell-input" id="id_command" placeholder="Enter command..." autocomplete="off" />
+            </div>
+        </div>
 
         <form id="commandForm" method="POST" enctype="multipart/form-data" class="mb-3">
             {% csrf_token %}
-            <div class="shell-container" id="shellContainer">
-                <div class="shell-history" id="shellHistory"></div>
-                <div class="shell-line mb-0">
-                    <span class="shell-prompt">$</span>
-                    {{ form.command }}
-                </div>
-            </div>
-        </form>
-
-        <form id="uploadForm" method="POST" enctype="multipart/form-data" class="mb-3">
-            {% csrf_token %}
             <div class="d-flex align-items-center gap-2 mt-2">
-                <button type="submit" class="btn btn-primary flex-fill" id="submitBtn">
+                <button type="submit" class="btn btn-primary flex-fill" id="sendBtn">
                     Send Command
                     <span class="spinner-border spinner-border-sm loading" role="status" aria-hidden="true"></span>
                 </button>
-                <div class="flex-fill">
-                    {{ form.ssh_file }}
-                </div>
+                <button type="button" class="btn btn-danger flex-fill" id="stopBtn">Stop Command</button>
+                <input type="file" name="ssh_file" class="form-control flex-fill" style="max-width: 250px;">
                 <button type="submit" class="btn btn-secondary flex-fill" name="upload" value="1">Upload SSH List</button>
             </div>
         </form>
@@ -150,11 +146,6 @@
     </div>
 
     <script>
-        // Function to strip ANSI color codes
-        function stripAnsiCodes(text) {
-            return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
-        }
-
         // Command history array with timestamps
         let commandHistory = JSON.parse(localStorage.getItem('commandHistory') || '[]');
         let historyIndex = -1;
@@ -162,6 +153,24 @@
         const shellContainer = document.getElementById('shellContainer');
         const shellHistory = document.getElementById('shellHistory');
         const MAX_HISTORY = 100;
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('sendBtn').click();
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && event.key === 'c') {
+                e.preventDefault();
+                document.getElementById('stopBtn').click();
+            }
+        });
+
+        function stripAnsiCodes(text) {
+            return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+        }
 
         // Format timestamp for display
         function formatTimestamp(timestamp) {
@@ -244,7 +253,7 @@
                 addToHistory(command);
             }
 
-            const submitBtn = document.getElementById('submitBtn');
+            const submitBtn = document.getElementById('sendBtn');
             const loading = submitBtn.querySelector('.loading');
             const results = document.getElementById('results');
             
@@ -295,6 +304,13 @@
                 commandInput.value = '';
                 commandInput.focus();
             };
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', function(e) {
+            fetch('/stop/', {
+                method: 'POST',
+                headers: {'X-CSRFToken': '{{ csrf_token }}'}
+            });
         });
     </script>
 </body>
