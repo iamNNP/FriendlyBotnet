@@ -10,11 +10,7 @@ import queue
 import threading
 
 # SSH details for the Docker containers
-CONTAINERS = [
-    {"name": "alpine11", "host": "localhost", "port": 2222, "username": "root", "password": "password"},
-    {"name": "alpine21", "host": "localhost", "port": 2221, "username": "root", "password": "password"},
-    {"name": "alpine31", "host": "localhost", "port": 2220, "username": "root", "password": "password"}
-]
+CONTAINERS = []
 
 stop_event = threading.Event()
 
@@ -62,10 +58,12 @@ def send_command_via_ssh(host, port, username, password, command):
         yield f"ERROR: {str(e)}"
 
 def stream_command_output(request):
-    """Stream command output from all containers asynchronously, line by line."""
+    """Stream command output from selected containers asynchronously, line by line."""
     global stop_event
     stop_event.clear()
     command = request.GET.get('command', '')
+    selected = request.GET.get('containers', '')
+    selected_names = set(selected.split(',')) if selected else set(c['name'] for c in CONTAINERS)
     if not command:
         return StreamingHttpResponse("No command provided", content_type='text/plain')
 
@@ -87,13 +85,15 @@ def stream_command_output(request):
             finally:
                 q.put((container['name'], None))  # Signal this container is done
 
+        # Only use selected containers
         for container in CONTAINERS:
-            t = threading.Thread(target=worker, args=(container,))
-            t.start()
-            threads.append(t)
+            if container['name'] in selected_names:
+                t = threading.Thread(target=worker, args=(container,))
+                t.start()
+                threads.append(t)
 
         finished = 0
-        total = len(CONTAINERS)
+        total = len(threads)
         while finished < total:
             try:
                 name, output = q.get(timeout=0.1)

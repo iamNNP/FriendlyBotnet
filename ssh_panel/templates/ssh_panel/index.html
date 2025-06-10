@@ -113,6 +113,8 @@
             from, to { border-color: transparent }
             50% { border-color: #00ff00; }
         }
+        .result-card.selectable { cursor: pointer; transition: border-color 0.2s; }
+        .result-card.active { border: 2px solid #00ff00 !important; }
     </style>
 </head>
 <body>
@@ -127,7 +129,15 @@
             </div>
         </div>
 
-        <form id="commandForm" method="POST" enctype="multipart/form-data" class="mb-3">
+        <form id="uploadForm" method="POST" enctype="multipart/form-data" class="mb-3">
+            {% csrf_token %}
+            <div class="d-flex align-items-center gap-2 mt-2">
+                <input type="file" name="ssh_file" class="form-control flex-fill" style="max-width: 250px;" required>
+                <button type="submit" class="btn btn-secondary flex-fill" name="upload" value="1" id="uploadBtn">Upload SSH List</button>
+            </div>
+        </form>
+
+        <form id="commandForm" method="POST" class="mb-3">
             {% csrf_token %}
             <div class="d-flex align-items-center gap-2 mt-2">
                 <button type="submit" class="btn btn-primary flex-fill" id="sendBtn">
@@ -135,8 +145,6 @@
                     <span class="spinner-border spinner-border-sm loading" role="status" aria-hidden="true"></span>
                 </button>
                 <button type="button" class="btn btn-danger flex-fill" id="stopBtn">Stop Command</button>
-                <input type="file" name="ssh_file" class="form-control flex-fill" style="max-width: 250px;">
-                <button type="submit" class="btn btn-secondary flex-fill" name="upload" value="1">Upload SSH List</button>
             </div>
         </form>
 
@@ -248,7 +256,10 @@
         document.getElementById('commandForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const command = commandInput.value;
-            
+
+            // Save the current selection
+            const selected = Array.from(window.activeContainers || []);
+
             if (command.trim()) {
                 addToHistory(command);
             }
@@ -261,27 +272,40 @@
             submitBtn.disabled = true;
             loading.style.display = 'inline-block';
             
-            const eventSource = new EventSource(`/stream/?command=${encodeURIComponent(command)}`);
-            
+            // Pass selected containers as a comma-separated list in the query
+            const eventSource = new EventSource(`/stream/?command=${encodeURIComponent(command)}&containers=${encodeURIComponent(selected.join(','))}`);
+
             const containers = {};
             // Dynamically get container names from the server
             fetch('/get_containers/')
                 .then(response => response.json())
                 .then(containerNames => {
+                    // Use the saved selection to set active state
+                    window.activeContainers = new Set(selected);
                     containerNames.forEach(name => {
                         containers[name] = {
                             element: document.createElement('div'),
                             output: document.createElement('pre')
                         };
-                        containers[name].element.className = 'card result-card';
+                        // Set .active only if selected
+                        containers[name].element.className = 'card result-card selectable' + (selected.includes(name) ? ' active' : '');
                         containers[name].element.innerHTML = `
                             <div class="card-header">
                                 <h3 class="h5 mb-0">${name}</h3>
                             </div>
-                            <div class="card-body container-output">
-                            </div>
+                            <div class="card-body container-output"></div>
                         `;
                         containers[name].element.querySelector('.card-body').appendChild(containers[name].output);
+                        // Add click event for selection
+                        containers[name].element.addEventListener('click', function() {
+                            if (containers[name].element.classList.contains('active')) {
+                                containers[name].element.classList.remove('active');
+                                window.activeContainers.delete(name);
+                            } else {
+                                containers[name].element.classList.add('active');
+                                window.activeContainers.add(name);
+                            }
+                        });
                         results.appendChild(containers[name].element);
                     });
                 });
@@ -312,6 +336,55 @@
                 headers: {'X-CSRFToken': '{{ csrf_token }}'}
             });
         });
+
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            // Let the form submit normally (page reloads)
+            // After reload, the backend will render the message and JS will add it to shell history
+        });
+        (function() {
+            var message = "{{ message|escapejs }}";
+            if (message && message !== "None" && message.trim() !== "") {
+                if (!commandHistory.length || commandHistory[commandHistory.length-1].command !== message) {
+                    addToHistory(message);
+                }
+            }
+        })();
+
+        // Remove checkbox rendering and use clickable cards for selection
+        function renderResultCards(containerNames) {
+            const results = document.getElementById('results');
+            results.innerHTML = '';
+            window.activeContainers = new Set(containerNames); // By default, all active
+
+            containerNames.forEach(name => {
+                const card = document.createElement('div');
+                card.className = 'card result-card selectable active';
+                card.dataset.container = name;
+                card.innerHTML = `
+                    <div class="card-header">
+                        <h3 class="h5 mb-0">${name}</h3>
+                    </div>
+                    <div class="card-body container-output"></div>
+                `;
+                card.addEventListener('click', function() {
+                    if (card.classList.contains('active')) {
+                        card.classList.remove('active');
+                        window.activeContainers.delete(name);
+                    } else {
+                        card.classList.add('active');
+                        window.activeContainers.add(name);
+                    }
+                });
+                results.appendChild(card);
+            });
+        }
+
+        // On page load, fetch containers and render result cards
+        fetch('/get_containers/')
+            .then(response => response.json())
+            .then(containerNames => {
+                renderResultCards(containerNames);
+            });
     </script>
 </body>
 </html>
