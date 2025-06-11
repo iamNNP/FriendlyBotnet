@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import StreamingHttpResponse, JsonResponse
 from .forms import SSHCommandForm
-from .models import CommandHistory
+from .models import CommandHistory, Container
 import paramiko
 import json
 import time
@@ -10,9 +10,6 @@ import concurrent.futures
 import queue
 import threading
 from django.core import serializers
-
-# SSH details for the Docker containers
-CONTAINERS = []
 
 stop_event = threading.Event()
 
@@ -65,11 +62,10 @@ def stream_command_output(request):
     stop_event.clear()
     command = request.GET.get('command', '')
     selected = request.GET.get('containers', '')
-    selected_names = set(selected.split(',')) if selected else set(c['name'] for c in CONTAINERS)
+    selected_names = set(selected.split(',')) if selected else set(Container.objects.values_list('name', flat=True))
     if not command:
         return StreamingHttpResponse("No command provided", content_type='text/plain')
 
-    # Collect output from all containers
     all_output = []
 
     def event_stream():
@@ -79,23 +75,22 @@ def stream_command_output(request):
         def worker(container):
             try:
                 for output in send_command_via_ssh(
-                    container["host"], container["port"], container["username"], container["password"], command
+                    container.host, container.port, container.username, container.password, command
                 ):
                     for line in output.splitlines(True):
-                        q.put((container['name'], line))
+                        q.put((container.name, line))
                     if stop_event.is_set():
                         break
             except Exception as e:
-                q.put((container['name'], f"ERROR: {e}\n"))
+                q.put((container.name, f"ERROR: {e}\n"))
             finally:
-                q.put((container['name'], None))  # Signal this container is done
+                q.put((container.name, None))  # Signal this container is done
 
-        # Only use selected containers
-        for container in CONTAINERS:
-            if container['name'] in selected_names:
-                t = threading.Thread(target=worker, args=(container,))
-                t.start()
-                threads.append(t)
+        # Only use selected containers from DB
+        for container in Container.objects.filter(name__in=selected_names):
+            t = threading.Thread(target=worker, args=(container,))
+            t.start()
+            threads.append(t)
 
         finished = 0
         total = len(threads)
@@ -118,7 +113,6 @@ def stream_command_output(request):
         content_type='text/event-stream'
     )
 
-    # After StreamingHttpResponse, save the command and output
     CommandHistory.objects.create(
         command=command,
         containers=",".join(selected_names),
@@ -148,7 +142,6 @@ def parse_ssh_file(file):
     return containers
 
 def index(request):
-    global CONTAINERS
     message = None
     if request.method == 'POST' and 'upload' in request.POST:
         form = SSHCommandForm(request.POST, request.FILES)
@@ -157,7 +150,11 @@ def index(request):
             if ssh_file:
                 containers = parse_ssh_file(ssh_file)
                 if containers:
-                    CONTAINERS = containers
+                    # Remove all old containers
+                    Container.objects.all().delete()
+                    # Add new containers to DB
+                    for c in containers:
+                        Container.objects.create(**c)
                     message = f"Loaded {len(containers)} SSH connections from file."
                 else:
                     message = "No valid SSH connections found in file."
@@ -170,7 +167,7 @@ def index(request):
 
 def get_containers(request):
     """Return the list of container names as JSON."""
-    return JsonResponse([c['name'] for c in CONTAINERS], safe=False)
+    return JsonResponse(list(Container.objects.values_list('name', flat=True)), safe=False)
 
 from django.views.decorators.csrf import csrf_exempt
 
@@ -196,3 +193,5 @@ def command_history_json(request):
         for h in history
     ]
     return JsonResponse(data, safe=False)
+
+
