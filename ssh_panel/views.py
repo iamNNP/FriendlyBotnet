@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from django.http import StreamingHttpResponse, JsonResponse
 from .forms import SSHCommandForm
+from .models import CommandHistory
 import paramiko
 import json
 import time
@@ -8,6 +9,7 @@ import asyncio
 import concurrent.futures
 import queue
 import threading
+from django.core import serializers
 
 # SSH details for the Docker containers
 CONTAINERS = []
@@ -67,6 +69,9 @@ def stream_command_output(request):
     if not command:
         return StreamingHttpResponse("No command provided", content_type='text/plain')
 
+    # Collect output from all containers
+    all_output = []
+
     def event_stream():
         q = queue.Queue()
         threads = []
@@ -100,6 +105,7 @@ def stream_command_output(request):
                 if output is None:
                     finished += 1
                 else:
+                    all_output.append(f"[{name}] {output}")
                     yield f"data: {json.dumps({'container': name, 'output': output})}\n\n"
             except queue.Empty:
                 continue
@@ -107,10 +113,19 @@ def stream_command_output(request):
         for t in threads:
             t.join()
 
-    return StreamingHttpResponse(
+    response = StreamingHttpResponse(
         event_stream(),
         content_type='text/event-stream'
     )
+
+    # After StreamingHttpResponse, save the command and output
+    CommandHistory.objects.create(
+        command=command,
+        containers=",".join(selected_names),
+        output="".join(all_output)
+    )
+
+    return response
 
 def parse_ssh_file(file):
     """Parse uploaded SSH file and return a list of container dicts."""
@@ -164,3 +179,20 @@ def stop_command(request):
     global stop_event
     stop_event.set()
     return JsonResponse({'status': 'stopped'})
+
+def command_history(request):
+    history = CommandHistory.objects.order_by('-timestamp')[:50]
+    return render(request, 'ssh_panel/history.html', {'history': history})
+
+def command_history_json(request):
+    history = CommandHistory.objects.order_by('-timestamp')[:50]
+    data = [
+        {
+            "command": h.command,
+            "timestamp": h.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "containers": h.containers,
+            "output": h.output,
+        }
+        for h in history
+    ]
+    return JsonResponse(data, safe=False)

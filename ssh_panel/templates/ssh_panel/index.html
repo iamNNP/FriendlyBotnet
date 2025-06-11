@@ -154,115 +154,91 @@
     </div>
 
     <script>
-        // Command history array with timestamps
-        let commandHistory = JSON.parse(localStorage.getItem('commandHistory') || '[]');
-        let historyIndex = -1;
         const commandInput = document.getElementById('id_command');
         const shellContainer = document.getElementById('shellContainer');
         const shellHistory = document.getElementById('shellHistory');
-        const MAX_HISTORY = 100;
 
+        // Fetch and render command history from the database
+        function fetchAndRenderHistory() {
+            fetch('/history_json/')
+                .then(response => response.json())
+                .then(history => {
+                    shellHistory.innerHTML = history.reverse().map(item => `
+                        <div class="shell-line">
+                            <span class="shell-prompt">$</span>
+                            <span class="shell-command">${item.command}</span>
+                        </div>
+                        <div class="shell-output">${item.output.replace(/\n/g, '<br>')}</div>
+                    `).join('');
+                    shellContainer.scrollTop = shellContainer.scrollHeight;
+                });
+        }
+        fetchAndRenderHistory();
+
+        // Handle Enter key to send command
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && document.activeElement === commandInput) {
                 e.preventDefault();
                 document.getElementById('sendBtn').click();
             }
         });
 
+        // Handle Ctrl+C to stop command
         document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && event.key === 'c') {
+            if (e.ctrlKey && e.key === 'c') {
                 e.preventDefault();
                 document.getElementById('stopBtn').click();
             }
         });
 
-        function stripAnsiCodes(text) {
-            return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
-        }
-
-        // Format timestamp for display
-        function formatTimestamp(timestamp) {
-            const date = new Date(timestamp);
-            return date.toLocaleTimeString();
-        }
-
-        // Save command history to localStorage
-        function saveCommandHistory() {
-            localStorage.setItem('commandHistory', JSON.stringify(commandHistory));
-        }
-
-        // Add command to history with timestamp
-        function addToHistory(command) {
-            const timestamp = new Date().toISOString();
-            commandHistory.push({
-                command: command,
-                timestamp: timestamp
-            });
-            
-            if (commandHistory.length > MAX_HISTORY) {
-                commandHistory = commandHistory.slice(-MAX_HISTORY);
-            }
-            
-            saveCommandHistory();
-            historyIndex = -1;
-            updateShellHistory();
-        }
-
-        // Update shell history display
-        function updateShellHistory() {
-            shellHistory.innerHTML = commandHistory
-                .map(item => `
-                    <div class="shell-line">
-                        <span class="shell-prompt">$</span>
-                        <span class="shell-command">${item.command}</span>
-                    </div>
-                `)
-                .join('');
-            shellContainer.scrollTop = shellContainer.scrollHeight;
-        }
-
-        // Initialize shell history
-        updateShellHistory();
-        // Add message to history only if it's not already the last entry
-        (function() {
-            var message = "{{ message|escapejs }}";
-            if (message != "None") {
-                if (!commandHistory.length || commandHistory[commandHistory.length-1].command !== message) {
-                    addToHistory(message);
+        // Handle command history navigation (optional, can be removed if not needed)
+        let historyIndex = -1;
+        let cachedHistory = [];
+        commandInput.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                if (!cachedHistory.length) {
+                    fetch('/history_json/')
+                        .then(response => response.json())
+                        .then(history => {
+                            cachedHistory = history.reverse();
+                            navigateHistory(e);
+                        });
+                } else {
+                    navigateHistory(e);
                 }
             }
-        })();
-
-        // Handle command history navigation
-        commandInput.addEventListener('keydown', function(e) {
+        });
+        function navigateHistory(e) {
             if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                if (historyIndex < commandHistory.length - 1) {
+                if (historyIndex < cachedHistory.length - 1) {
                     historyIndex++;
-                    commandInput.value = commandHistory[commandHistory.length - 1 - historyIndex].command;
+                    commandInput.value = cachedHistory[historyIndex].command;
                 }
             } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 if (historyIndex > 0) {
                     historyIndex--;
-                    commandInput.value = commandHistory[commandHistory.length - 1 - historyIndex].command;
+                    commandInput.value = cachedHistory[historyIndex].command;
                 } else if (historyIndex === 0) {
                     historyIndex = -1;
                     commandInput.value = '';
                 }
             }
-        });
+        }
 
+        // Utility to strip ANSI codes
+        function stripAnsiCodes(text) {
+            return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+        }
+
+        // Handle command form submission
         document.getElementById('commandForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const command = commandInput.value;
 
             // Save the current selection
             const selected = Array.from(window.activeContainers || []);
-
-            if (command.trim()) {
-                addToHistory(command);
-            }
 
             const submitBtn = document.getElementById('sendBtn');
             const loading = submitBtn.querySelector('.loading');
@@ -327,9 +303,11 @@
                 loading.style.display = 'none';
                 commandInput.value = '';
                 commandInput.focus();
+                fetchAndRenderHistory(); // Refresh history after command completes
             };
         });
 
+        // Stop command handler
         document.getElementById('stopBtn').addEventListener('click', function(e) {
             fetch('/stop/', {
                 method: 'POST',
@@ -337,20 +315,12 @@
             });
         });
 
+        // Upload SSH list form (default submit, page reloads)
         document.getElementById('uploadForm').addEventListener('submit', function(e) {
             // Let the form submit normally (page reloads)
-            // After reload, the backend will render the message and JS will add it to shell history
         });
-        (function() {
-            var message = "{{ message|escapejs }}";
-            if (message && message !== "None" && message.trim() !== "") {
-                if (!commandHistory.length || commandHistory[commandHistory.length-1].command !== message) {
-                    addToHistory(message);
-                }
-            }
-        })();
 
-        // Remove checkbox rendering and use clickable cards for selection
+        // Render result cards for container selection on page load
         function renderResultCards(containerNames) {
             const results = document.getElementById('results');
             results.innerHTML = '';
@@ -388,3 +358,5 @@
     </script>
 </body>
 </html>
+
+
