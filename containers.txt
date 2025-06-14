@@ -1,3 +1,5 @@
-alpine11:localhost:2222:root:password
-alpine21:localhost:2221:root:password
-alpine31:localhost:2220:root:password
+kali1:localhost:2222:root:password
+kali2:localhost:2221:root:password
+kali3:localhost:2220:root:password
+kali4:localhost:2219:root:password
+kali5:localhost:2218:root:password

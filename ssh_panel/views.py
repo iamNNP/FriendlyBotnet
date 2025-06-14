@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import StreamingHttpResponse, JsonResponse
 from .forms import SSHCommandForm
-from .models import CommandHistory, Container
+from .models import CommandHistory, Container, CommandShortcut
 import paramiko
 import json
 import time
@@ -10,6 +10,8 @@ import concurrent.futures
 import queue
 import threading
 from django.core import serializers
+from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
 
 stop_event = threading.Event()
 
@@ -50,7 +52,7 @@ def send_command_via_ssh(host, port, username, password, command):
         
         exit_status = stdout.channel.recv_exit_status()
         if exit_status != 0:
-            yield f"\nCommand exited with status {exit_status}"
+            yield f"\nCommand exited with status {exit_status}\n"
         
         ssh.close()
     except Exception as e:
@@ -84,9 +86,8 @@ def stream_command_output(request):
             except Exception as e:
                 q.put((container.name, f"ERROR: {e}\n"))
             finally:
-                q.put((container.name, None))  # Signal this container is done
+                q.put((container.name, None))
 
-        # Only use selected containers from DB
         for container in Container.objects.filter(name__in=selected_names):
             t = threading.Thread(target=worker, args=(container,))
             t.start()
@@ -99,8 +100,11 @@ def stream_command_output(request):
                 name, output = q.get(timeout=0.1)
                 if output is None:
                     finished += 1
-                else:
+                else: 
                     all_output.append(f"[{name}] {output}")
+                    container = Container.objects.get(name=name)
+                    container.output += output
+                    container.save(update_fields=['output'])
                     yield f"data: {json.dumps({'container': name, 'output': output})}\n\n"
             except queue.Empty:
                 continue
@@ -135,10 +139,11 @@ def parse_ssh_file(file):
                 'host': host,
                 'port': int(port),
                 'username': username,
-                'password': password
+                'password': password,
+                'output': ''
             })
         except Exception:
-            continue  # skip malformed lines
+            continue
     return containers
 
 def index(request):
@@ -150,9 +155,7 @@ def index(request):
             if ssh_file:
                 containers = parse_ssh_file(ssh_file)
                 if containers:
-                    # Remove all old containers
                     Container.objects.all().delete()
-                    # Add new containers to DB
                     for c in containers:
                         Container.objects.create(**c)
                     message = f"Loaded {len(containers)} SSH connections from file."
@@ -169,7 +172,10 @@ def get_containers(request):
     """Return the list of container names as JSON."""
     return JsonResponse(list(Container.objects.values_list('name', flat=True)), safe=False)
 
-from django.views.decorators.csrf import csrf_exempt
+def get_shortcuts(request):
+    """Return the list of command shortcuts as JSON."""
+    shortcuts = list(CommandShortcut.objects.values('name', 'commands'))
+    return JsonResponse(shortcuts, safe=False)
 
 @csrf_exempt
 def stop_command(request):
@@ -194,4 +200,58 @@ def command_history_json(request):
     ]
     return JsonResponse(data, safe=False)
 
+def upload_shortcuts(request):
+    """Upload a file with shortcuts, each line: shortcut_name: command1 [; command2 ...]"""
+    if request.method == 'POST' and request.FILES.get('shortcut_file'):
+        file = request.FILES['shortcut_file']
+        count = 0
+        for line in file:
+            try:
+                line = line.decode('utf-8').strip()
+                if not line or line.startswith('#'):
+                    continue
+                if ':' in line:
+                    name, commands = line.split(':', 1)
+                    CommandShortcut.objects.update_or_create(
+                        name=name.strip(),
+                        defaults={'commands': commands.strip()}
+                    )
+                    count += 1
+                else:
+                    CommandShortcut.objects.update_or_create(
+                        name=line.strip(),
+                        defaults={'commands': line.strip()}
+                    )
+                    count += 1
+            except Exception:
+                continue
+        return JsonResponse({'status': 'ok', 'count': count})
+    return JsonResponse({'status': 'error'}, status=400)
 
+@csrf_exempt
+@require_POST
+def delete_shortcut(request):
+    from django.http import JsonResponse
+    from .models import CommandShortcut
+    name = request.POST.get('name')
+    if name:
+        CommandShortcut.objects.filter(name=name).delete()
+        return JsonResponse({'status': 'ok'})
+    return JsonResponse({'status': 'error'}, status=400)
+
+def get_container_outputs(request):
+    """Return a mapping of container names to their saved output."""
+    data = {c.name: c.output for c in Container.objects.all()}
+    return JsonResponse(data)
+
+@csrf_exempt
+@require_POST
+def clean_outputs(request):
+    from django.http import JsonResponse
+    from .models import Container
+    selected = request.POST.getlist('containers[]')
+    if selected:
+        Container.objects.filter(name__in=selected).update(output='')
+    else:
+        Container.objects.all().update(output='')
+    return JsonResponse({'status': 'ok'})

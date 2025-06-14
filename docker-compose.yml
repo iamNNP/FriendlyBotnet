@@ -1,33 +1,53 @@
 version: '3.8'
 
 services:
-  alpine1:
+  kali1:
     build:
       context: .
       dockerfile: Dockerfile.sshd
-    container_name: alpine11
+    container_name: kali1
     ports:
       - "2222:22"
     networks:
       - botnet_network
 
-  alpine2:
+  kali2:
     build:
       context: .
       dockerfile: Dockerfile.sshd
-    container_name: alpine21
+    container_name: kali2
     ports:
       - "2221:22"
     networks:
       - botnet_network
 
-  alpine3:
+  kali3:
     build:
       context: .
       dockerfile: Dockerfile.sshd
-    container_name: alpine31
+    container_name: kali3
     ports:
       - "2220:22"
+    networks:
+      - botnet_network
+
+  kali4:
+    build:
+      context: .
+      dockerfile: Dockerfile.sshd
+    container_name: kali4
+    ports:
+      - "2219:22"
+    networks:
+      - botnet_network
+
+  kali5:
+    build:
+      context: .
+      dockerfile: Dockerfile.sshd
+    container_name: kali5
+    ports:
+      - "2218:22"
     networks:
       - botnet_network
 

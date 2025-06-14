@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SSH Command Panel</title>
+    <title>Command Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        :root {
+            --theme-color: #00ff00;
+        }
         body {
             background-color: #1e1e1e;
             color: #fff;
@@ -29,7 +32,7 @@
             border-radius: 0.25rem;
             white-space: pre-wrap;
             word-wrap: break-word;
-            color: #00ff00;
+            color: var(--theme-color);
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             margin: 0;
         }
@@ -67,7 +70,7 @@
             word-wrap: break-word;
         }
         .shell-prompt {
-            color: #00ff00;
+            color: var(--theme-color);
             margin-right: 0.5rem;
             user-select: none;
         }
@@ -78,7 +81,7 @@
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             flex-grow: 1;
             outline: none;
-            caret-color: #00ff00;
+            caret-color: var(--theme-color);
         }
         .shell-input::placeholder {
             color: #777;
@@ -87,10 +90,10 @@
             color: #777;
         }
         .shell-command {
-            color: #fff;
+            color: var(--theme-color);
         }
         .shell-output {
-            color: #00ff00;
+            color: var(--theme-color);
             margin-left: 1.5rem;
             white-space: pre-wrap;
         }
@@ -106,20 +109,28 @@
             color: #fff;
         }
         .typing {
-            border-right: 2px solid #00ff00;
+            border-right: 2px solid var(--theme-color);
             animation: blink 1s step-end infinite;
         }
         @keyframes blink {
             from, to { border-color: transparent }
-            50% { border-color: #00ff00; }
+            50% { border-color: var(--theme-color); }
         }
         .result-card.selectable { cursor: pointer; transition: border-color 0.2s; }
-        .result-card.active { border: 2px solid #00ff00 !important; }
+        .result-card.active { border: 2px solid var(--theme-color) !important; }
+        .btn-outline-info, .btn-shortcut {
+            color: var(--theme-color) !important;
+            border-color: var(--theme-color) !important;
+        }
+        .btn-outline-info:hover, .btn-shortcut:hover {
+            background: var(--theme-color) !important;
+            color: #fff !important;
+        }
     </style>
 </head>
 <body>
     <div class="container py-5">
-        <h1 class="mb-4">SSH Command Panel</h1>
+        <h1 class="mb-4">Command Panel</h1>
         
         <div class="shell-container" id="shellContainer">
             <div class="shell-history" id="shellHistory"></div>
@@ -129,36 +140,70 @@
             </div>
         </div>
 
-        <form id="uploadForm" method="POST" enctype="multipart/form-data" class="mb-3">
-            {% csrf_token %}
-            <div class="d-flex align-items-center gap-2 mt-2">
-                <input type="file" name="ssh_file" class="form-control flex-fill" style="max-width: 250px;" required>
-                <button type="submit" class="btn btn-secondary flex-fill" name="upload" value="1" id="uploadBtn">Upload SSH List</button>
+        <div class="d-flex align-items-center gap-2 mt-2">
+            <button type="button" class="btn btn-shortcut flex-fill mb-3" id="openSshModalBtn">Add SSH List</button>
+            <button type="button" class="btn btn-shortcut flex-fill mb-3" id="openShortcutModalBtn">Add Shortcuts</button>
+        </div>
+
+        <div class="modal fade" id="sshListModal" tabindex="-1" aria-labelledby="sshListModalLabel" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content bg-dark text-light">
+              <div class="modal-header">
+                <h5 class="modal-title" id="sshListModalLabel">Paste SSH List</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <textarea id="sshListTextarea" class="form-control" rows="8" placeholder="name:host:port:username:password\n..."></textarea>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-shortcut" id="submitSshListBtn">Submit</button>
+              </div>
             </div>
-        </form>
+          </div>
+        </div>
+        
+        <div class="modal fade" id="shortcutListModal" tabindex="-1" aria-labelledby="shortcutListModalLabel" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content bg-dark text-light">
+              <div class="modal-header">
+                <h5 class="modal-title" id="shortcutListModalLabel">Paste Shortcuts List</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <textarea id="shortcutListTextarea" class="form-control" rows="8" placeholder="shortcut_name: command1 [; command2 ...]\n..."></textarea>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-shortcut" id="submitShortcutListBtn">Submit</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="shortcut-list" class="d-flex flex-wrap gap-2 mb-2" style="padding-top: 5px;"></div>
 
         <form id="commandForm" method="POST" class="mb-3">
             {% csrf_token %}
             <div class="d-flex align-items-center gap-2 mt-2">
-                <button type="submit" class="btn btn-primary flex-fill" id="sendBtn">
+                <button type="submit" class="btn btn-shortcut flex-fill" id="sendBtn">
                     Send Command
                     <span class="spinner-border spinner-border-sm loading" role="status" aria-hidden="true"></span>
                 </button>
-                <button type="button" class="btn btn-danger flex-fill" id="stopBtn">Stop Command</button>
+                <button type="button" class="btn btn-shortcut flex-fill" id="stopBtn">Stop Command</button>
+                <button type="button" class="btn btn-outline-info flex-fill" id="clearOutputsBtn">Clear Output</button>
+                <input type="color" id="themeColor" value="#00ff00">
             </div>
         </form>
 
-        <div id="results">
-            <!-- Results will be dynamically added here -->
-        </div>
+        <div id="results"></div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         const commandInput = document.getElementById('id_command');
         const shellContainer = document.getElementById('shellContainer');
         const shellHistory = document.getElementById('shellHistory');
 
-        // Fetch and render command history from the database
         function fetchAndRenderHistory() {
             fetch('/history_json/')
                 .then(response => response.json())
@@ -175,7 +220,6 @@
         }
         fetchAndRenderHistory();
 
-        // Handle Enter key to send command
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && document.activeElement === commandInput) {
                 e.preventDefault();
@@ -183,7 +227,6 @@
             }
         });
 
-        // Handle Ctrl+C to stop command
         document.addEventListener('keydown', function(e) {
             if (e.ctrlKey && e.key === 'c') {
                 e.preventDefault();
@@ -191,101 +234,56 @@
             }
         });
 
-        // Handle command history navigation (optional, can be removed if not needed)
-        let historyIndex = -1;
+        let historyIndex = 0;
         let cachedHistory = [];
         commandInput.addEventListener('keydown', function(e) {
             if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                if (!cachedHistory.length) {
-                    fetch('/history_json/')
-                        .then(response => response.json())
-                        .then(history => {
-                            cachedHistory = history.reverse();
-                            navigateHistory(e);
-                        });
-                } else {
-                    navigateHistory(e);
-                }
+                fetch('/history_json/')
+                    .then(response => response.json())
+                    .then(history => {
+                        cachedHistory = history;
+                        cachedHistory.unshift(JSON.parse('{"command": "", "timestamp": "", "containers": "", "output": ""}'));
+                        navigateHistory(e);
+                    });
             }
         });
+
         function navigateHistory(e) {
+            e.preventDefault();
             if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                if (historyIndex < cachedHistory.length - 1) {
+                if (historyIndex != cachedHistory.length - 1) {
                     historyIndex++;
-                    commandInput.value = cachedHistory[historyIndex].command;
                 }
-            } else if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (historyIndex > 0) {
+            } else {
+                if (historyIndex != 0) {
                     historyIndex--;
-                    commandInput.value = cachedHistory[historyIndex].command;
-                } else if (historyIndex === 0) {
-                    historyIndex = -1;
-                    commandInput.value = '';
                 }
             }
+            commandInput.value = cachedHistory[historyIndex].command;
         }
 
-        // Utility to strip ANSI codes
         function stripAnsiCodes(text) {
             return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
         }
 
-        // Handle command form submission
-        document.getElementById('commandForm').addEventListener('submit', function(e) {
+        document.getElementById('commandForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const command = commandInput.value;
 
-            // Save the current selection
             const selected = Array.from(window.activeContainers || []);
 
             const submitBtn = document.getElementById('sendBtn');
             const loading = submitBtn.querySelector('.loading');
             const results = document.getElementById('results');
             
-            results.innerHTML = '';
+            const containerNames = await fetch('/get_containers/').then(r => r.json());
+            const containers = ensureResultCards(containerNames, selected);
+
             submitBtn.disabled = true;
             loading.style.display = 'inline-block';
             
-            // Pass selected containers as a comma-separated list in the query
             const eventSource = new EventSource(`/stream/?command=${encodeURIComponent(command)}&containers=${encodeURIComponent(selected.join(','))}`);
 
-            const containers = {};
-            // Dynamically get container names from the server
-            fetch('/get_containers/')
-                .then(response => response.json())
-                .then(containerNames => {
-                    // Use the saved selection to set active state
-                    window.activeContainers = new Set(selected);
-                    containerNames.forEach(name => {
-                        containers[name] = {
-                            element: document.createElement('div'),
-                            output: document.createElement('pre')
-                        };
-                        // Set .active only if selected
-                        containers[name].element.className = 'card result-card selectable' + (selected.includes(name) ? ' active' : '');
-                        containers[name].element.innerHTML = `
-                            <div class="card-header">
-                                <h3 class="h5 mb-0">${name}</h3>
-                            </div>
-                            <div class="card-body container-output"></div>
-                        `;
-                        containers[name].element.querySelector('.card-body').appendChild(containers[name].output);
-                        // Add click event for selection
-                        containers[name].element.addEventListener('click', function() {
-                            if (containers[name].element.classList.contains('active')) {
-                                containers[name].element.classList.remove('active');
-                                window.activeContainers.delete(name);
-                            } else {
-                                containers[name].element.classList.add('active');
-                                window.activeContainers.add(name);
-                            }
-                        });
-                        results.appendChild(containers[name].element);
-                    });
-                });
-            
             eventSource.onmessage = function(e) {
                 const data = JSON.parse(e.data);
                 const container = containers[data.container];
@@ -303,11 +301,10 @@
                 loading.style.display = 'none';
                 commandInput.value = '';
                 commandInput.focus();
-                fetchAndRenderHistory(); // Refresh history after command completes
+                fetchAndRenderHistory();
             };
         });
 
-        // Stop command handler
         document.getElementById('stopBtn').addEventListener('click', function(e) {
             fetch('/stop/', {
                 method: 'POST',
@@ -315,16 +312,128 @@
             });
         });
 
-        // Upload SSH list form (default submit, page reloads)
-        document.getElementById('uploadForm').addEventListener('submit', function(e) {
-            // Let the form submit normally (page reloads)
+        const sshModal = new bootstrap.Modal(document.getElementById('sshListModal'));
+        document.getElementById('openSshModalBtn').addEventListener('click', () => {
+            document.getElementById('sshListTextarea').value = '';
+            sshModal.show();
+        });
+        document.getElementById('submitSshListBtn').addEventListener('click', function() {
+            const textarea = document.getElementById('sshListTextarea');
+            const text = textarea.value.trim();
+            if (!text) return;
+            const blob = new Blob([text], { type: 'text/plain' });
+            const file = new File([blob], 'ssh_list.txt', { type: 'text/plain' });
+            const formData = new FormData();
+            formData.append('ssh_file', file);
+            formData.append('upload', '1');
+            fetch('', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            }).then(res => {
+                if (res.ok) {
+                    sshModal.hide();
+                    location.reload();
+                }
+            });
         });
 
-        // Render result cards for container selection on page load
+        const shortcutModal = new bootstrap.Modal(document.getElementById('shortcutListModal'));
+        document.getElementById('openShortcutModalBtn').addEventListener('click', () => {
+            document.getElementById('shortcutListTextarea').value = '';
+            shortcutModal.show();
+        });
+        document.getElementById('submitShortcutListBtn').addEventListener('click', function() {
+            const textarea = document.getElementById('shortcutListTextarea');
+            const text = textarea.value.trim();
+            if (!text) return;
+            const blob = new Blob([text], { type: 'text/plain' });
+            const file = new File([blob], 'shortcuts.txt', { type: 'text/plain' });
+            const formData = new FormData();
+            formData.append('shortcut_file', file);
+            fetch('/upload_shortcuts/', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            }).then(res => {
+                if (res.ok) {
+                    shortcutModal.hide();
+                    fetchShortcuts();
+                }
+            });
+        });
+
+        function ensureResultCards(containerNames, selected) {
+            const results = document.getElementById('results');
+            const containers = {};
+            const selectedSet = new Set(selected);
+
+            Array.from(results.children).forEach(card => {
+                const name = card.dataset.container;
+                containers[name] = {
+                    element: card,
+                    output: card.querySelector('pre') || (() => {
+                        const pre = document.createElement('pre');
+                        card.querySelector('.card-body').appendChild(pre);
+                        return pre;
+                    })()
+                };
+
+                if (selectedSet.has(name)) {
+                    card.classList.add('active');
+                } else {
+                    card.classList.remove('active');
+                }
+            });
+
+            containerNames.forEach(name => {
+                if (!containers[name]) {
+                    const card = document.createElement('div');
+                    card.className = 'card result-card selectable' + (selectedSet.has(name) ? ' active' : '');
+                    card.dataset.container = name;
+                    card.innerHTML = `
+                        <div class="card-header">
+                            <h3 class="h5 mb-0">${name}</h3>
+                        </div>
+                        <div class="card-body container-output"></div>
+                    `;
+                    card.addEventListener('click', function() {
+                        if (card.classList.contains('active')) {
+                            card.classList.remove('active');
+                            window.activeContainers.delete(name);
+                        } else {
+                            card.classList.add('active');
+                            window.activeContainers.add(name);
+                        }
+                    });
+                    const output = document.createElement('pre');
+                    card.querySelector('.card-body').appendChild(output);
+                    results.appendChild(card);
+                    containers[name] = { element: card, output };
+                }
+            });
+            return containers;
+        }
+
+        function renderResultCards(containerNames) {
+            window.activeContainers = new Set(containerNames);
+            ensureResultCards(containerNames, containerNames);
+        }
+
+        async function runShortcut(commands) {
+            const commandList = commands.split(';').map(cmd => cmd.trim()).filter(Boolean);
+            const selected = Array.from(window.activeContainers || []);
+            const containerNames = await fetch('/get_containers/').then(r => r.json());
+            const containers = ensureResultCards(containerNames, selected);
+            for (const command of commandList) {
+                await runCommandOnSelectedContainers(command, selected, containers);
+            }
+        }
+
         function renderResultCards(containerNames) {
             const results = document.getElementById('results');
             results.innerHTML = '';
-            window.activeContainers = new Set(containerNames); // By default, all active
+            window.activeContainers = new Set(containerNames);
 
             containerNames.forEach(name => {
                 const card = document.createElement('div');
@@ -349,14 +458,165 @@
             });
         }
 
-        // On page load, fetch containers and render result cards
         fetch('/get_containers/')
             .then(response => response.json())
             .then(containerNames => {
                 renderResultCards(containerNames);
             });
+
+        fetch('/get_container_outputs/')
+            .then(response => response.json())
+            .then(outputs => {
+                const results = document.getElementById('results');
+                Object.entries(outputs).forEach(([name, output]) => {
+                    const card = results.querySelector(`.result-card[data-container="${name}"]`);
+                    if (card) {
+                        const pre = card.querySelector('pre');
+                        if (pre) {
+                            pre.textContent = output;
+                        } else {
+                            const newPre = document.createElement('pre');
+                            newPre.textContent = output;
+                            card.querySelector('.card-body').appendChild(newPre);
+                        }
+                    }
+                });
+            }); 
+
+        function fetchShortcuts() {
+            fetch('/shortcuts/')
+                .then(response => response.json())
+                .then(shortcuts => {
+                    const list = document.getElementById('shortcut-list');
+                    list.innerHTML = '';
+                    shortcuts.forEach(item => {
+                        const btn = document.createElement('button');
+                        btn.className = 'btn btn-shortcut me-2';
+                        btn.textContent = item.name;
+                        btn.title = item.commands;
+                        btn.onclick = function(e) {
+                            e.preventDefault();
+                            runShortcut(item.commands);
+                        };
+
+                        const removeBtn = document.createElement('button');
+                        removeBtn.className = 'btn btn-danger btn-sm ms-1';
+                        removeBtn.textContent = '✕';
+                        removeBtn.title = 'Remove shortcut';
+                        removeBtn.onclick = function(e) {
+                            e.stopPropagation();
+                            fetch('/delete_shortcut/', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRFToken': '{{ csrf_token }}',
+                                },
+                                body: new URLSearchParams({name: item.name})
+                            }).then(res => {
+                                if (res.ok) fetchShortcuts();
+                            });
+                        };
+
+                        const wrapper = document.createElement('span');
+                        wrapper.appendChild(btn);
+                        wrapper.appendChild(removeBtn);
+                        list.appendChild(wrapper);
+                    });
+                });
+        }
+        fetchShortcuts();
+
+        async function runShortcut(commands) {
+            const commandList = commands.split(';').map(cmd => cmd.trim()).filter(Boolean);
+            const selected = Array.from(window.activeContainers || []);
+            const containerNames = await fetch('/get_containers/').then(r => r.json());
+            const containers = ensureResultCards(containerNames, selected);
+            for (const command of commandList) {
+                await runCommandOnSelectedContainers(command, selected, containers);
+            }
+        }
+
+        function runCommandOnSelectedContainers(command, selected, containers) {
+            return new Promise((resolve) => {
+                const submitBtn = document.getElementById('sendBtn');
+                const loading = submitBtn.querySelector('.loading');
+                submitBtn.disabled = true;
+                loading.style.display = 'inline-block';
+
+                const eventSource = new EventSource(`/stream/?command=${encodeURIComponent(command)}&containers=${encodeURIComponent(selected.join(','))}`);
+
+                const finished = new Set();
+                const promptPrinted = {};
+
+                eventSource.onmessage = function(e) {
+                    const data = JSON.parse(e.data);
+                    const container = containers[data.container];
+                    if (container) {
+                        const output = container.output;
+                        const cleanOutput = stripAnsiCodes(data.output);
+
+                        if (!promptPrinted[data.container]) {
+                            output.textContent += `\n$ ${command}\n`;
+                            promptPrinted[data.container] = true;
+                        }
+                        output.textContent += cleanOutput;
+                        output.scrollTop = output.scrollHeight;
+
+                        if (
+                            cleanOutput.includes('Command stopped by user.') ||
+                            cleanOutput.includes('Command exited') ||
+                            cleanOutput.includes('ERROR:')
+                        ) {
+                            finished.add(data.container);
+                            if (finished.size === selected.length) {
+                                eventSource.close();
+                                submitBtn.disabled = false;
+                                loading.style.display = 'none';
+                                commandInput.value = '';
+                                commandInput.focus();
+                                fetchAndRenderHistory();
+                                resolve();
+                            }
+                        }
+                    }
+                };
+
+                eventSource.onerror = function() {
+                    eventSource.close();
+                    submitBtn.disabled = false;
+                    loading.style.display = 'none';
+                    commandInput.value = '';
+                    commandInput.focus();
+                    fetchAndRenderHistory();
+                    resolve();
+                };
+            });
+        }
+
+        document.getElementById('themeColor').addEventListener('input', function(e) {
+            document.documentElement.style.setProperty('--theme-color', e.target.value);
+        });
+
+        document.getElementById('clearOutputsBtn').addEventListener('click', async function() {
+            const selected = Array.from(window.activeContainers || []);
+            if (selected.length === 0) return;
+            await fetch('/clean_outputs/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams(selected.map(name => ['containers[]', name]))
+            });
+
+            const results = document.getElementById('results');
+            selected.forEach(name => {
+                const card = results.querySelector(`.result-card[data-container="${name}"]`);
+                if (card) {
+                    const pre = card.querySelector('pre');
+                    if (pre) pre.textContent = '';
+                }
+            });
+        });
     </script>
 </body>
 </html>
-
-

@@ -1,0 +1,1 @@
+Ping google.com: curl https://google.com; ping -c 5 google.com

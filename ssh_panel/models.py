@@ -6,6 +6,7 @@ class Container(models.Model):
     port = models.IntegerField()
     username = models.CharField(max_length=100)
     password = models.CharField(max_length=100)
+    output = models.TextField(blank=True, default='')
 
     def __str__(self):
         return self.name
@@ -18,3 +19,10 @@ class CommandHistory(models.Model):
 
     def __str__(self):
         return f"{self.command} @ {self.timestamp}"
+
+class CommandShortcut(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    commands = models.TextField()
+
+    def __str__(self):
+        return self.name
