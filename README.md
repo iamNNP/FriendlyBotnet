@@ -8,17 +8,9 @@ Activate the virtual environment:
 
 ```bash
 cd FriendlyBotnet && python -m venv venv
-```
-```bash
-source venv/bin/activate
-```
-On Linux and 
-```bash
-venv\Scripts\activate
-```
-On Windows
-```bash
-pip install -r requirements.txt
+
+source venv/bin/activate # On Linux
+venv\Scripts\activate # On Windows
 ```
 
 ## Usage
@@ -34,6 +26,13 @@ Run the app
 ```bash
 python manage.py runserver
 ```
+First add SSH list of connections to your machines (in test case for docker containers, just copy it from containers.txt file)
+You can run commands on selected containers (unselect them by clicking on the container card)
+![clickable containers image](./static/chrome_pQW7lIkkGH.png)
+Paste your command here and click enter, or press start command
+![start command field](./static/ShareX_Ghif8goS6G.png)
+You can add shortcuts (a sequence of commands) and run them by clicking on the buttons
+![start command field](./static/chrome_2m3aESau5H.png)
 
 
 ## Contributing
