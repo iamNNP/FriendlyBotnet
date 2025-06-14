@@ -11,6 +11,8 @@ cd FriendlyBotnet && python -m venv venv
 
 source venv/bin/activate # On Linux
 venv\Scripts\activate # On Windows
+
+pip install -r requirements.txt
 ```
 
 ## Usage
@@ -27,6 +29,7 @@ Run the app
 python manage.py runserver
 ```
 First add SSH list of connections to your machines (in test case for docker containers, just copy it from containers.txt file)
+
 You can run commands on selected containers (unselect them by clicking on the container card)
 ![clickable containers image](./static/chrome_pQW7lIkkGH.png)
 Paste your command here and click enter, or press start command
