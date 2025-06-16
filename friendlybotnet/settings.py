@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'ssh_panel',
+    'django_extensions',  # Optional: for development tools like shell_plus
 ]
 
 MIDDLEWARE = [

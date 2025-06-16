@@ -1,0 +1,28 @@
+@startuml
+actor User
+participant Browser
+participant "Django Server" as Server
+participant "SSH Client/Bot" as Bot
+
+User -> Browser : Inputs a command and presss Send
+Browser -> Server : POST /stream/ (command, list of containers)
+Server -> Bot : SSH-connection, exec(command)
+Bot -> Server : Command result
+Server -> Browser : Stream output (SSE)
+Browser -> User : Shows output
+
+newpage
+
+User -> Browser : Opens a form for SSH list upload
+Browser -> Server : POST / (file/text upload)
+Server -> Server : Parses the file, updates the SQLite database of containers
+Server -> Browser : Response OK
+
+newpage
+
+User -> Browser : Opens a form for Shortcut list upload
+Browser -> Server : POST /upload_shortcuts/
+Server -> Server : Save to database
+Server -> Browser : Response OK
+
+@enduml
