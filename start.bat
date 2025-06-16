@@ -1,0 +1,1 @@
+docker-compose up -d && venv\Scripts\activate && python manage.py runserver
